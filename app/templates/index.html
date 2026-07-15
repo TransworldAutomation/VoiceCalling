@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if calling_ready %}
+<div class="panel" style="border-color: var(--accent-2)">
+  📞 <b>Calling is ON.</b> The voice server is reachable — click <b>Call</b> on any contact below, or call everyone.
+</div>
+{% else %}
+<div class="panel" style="border-color: var(--warn)">
+  ⚠️ <b>Calling is OFF.</b> Contacts and history work, but to actually dial you must first start the voice engine:
+  open PowerShell in this folder and run <code>.\scripts\start_calling.ps1</code>, then refresh this page.
+</div>
+{% endif %}
+
+<div class="panel" style="border-color: var(--accent)">
+  <h2>🗣️ What should the AI ask on the call?</h2>
+  <p class="muted">Type your question(s) below. The AI will greet the person and ask exactly this, in the language you choose. Changes apply to the next call immediately — no restart needed.</p>
+  <form action="/settings/script" method="post">
+    <textarea name="question" rows="5" placeholder="Example:&#10;Ask the person these questions one by one:&#10;1. What is your name?&#10;2. Which city are you from?&#10;3. Are you interested in a home loan this year?"
+      style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--line); background:var(--panel-2); color:var(--text); font: inherit; resize:vertical;">{{ interview_script }}</textarea>
+    <div style="display:flex; align-items:center; gap:12px; margin-top:10px; flex-wrap:wrap">
+      <label class="muted">Language the AI speaks:</label>
+      <select name="language" style="padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel-2); color:var(--text)">
+        {% set langs = [("en-IN","English"),("hi-IN","Hindi"),("mr-IN","Marathi"),("ta-IN","Tamil"),("te-IN","Telugu"),("kn-IN","Kannada"),("bn-IN","Bengali"),("gu-IN","Gujarati"),("ml-IN","Malayalam"),("pa-IN","Punjabi")] %}
+        {% for code, label in langs %}
+        <option value="{{ code }}" {% if code == default_language %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn" type="submit">💾 Save question</button>
+      {% if interview_script %}<span class="muted">✅ A question is saved.</span>{% else %}<span class="muted">No question saved yet — the default interview will be used.</span>{% endif %}
+    </div>
+  </form>
+</div>
+
+<div class="grid">
+  <div class="stat"><div class="n">{{ stats.total }}</div><div class="l">Total calls</div></div>
+  <div class="stat"><div class="n">{{ stats.completed }}</div><div class="l">Completed</div></div>
+  <div class="stat"><div class="n">{{ stats.failed }}</div><div class="l">Failed</div></div>
+  <div class="stat"><div class="n">{{ stats.contacts }}</div><div class="l">Contacts</div></div>
+</div>
+
+<div class="panel">
+  <h2>Upload contacts</h2>
+  <p class="muted">CSV or Excel with columns: <b>name, phone, language, notes</b>. Only <b>phone</b> is required.</p>
+  <p class="muted">💡 The <b>notes</b> column is the <b>question the AI will ask that person</b> (e.g. "Are you interested in a home loan?"). Leave it blank to use the default interview. The <b>language</b> column (e.g. <code>hi-IN</code>, <code>mr-IN</code>, <code>ta-IN</code>) sets the language the AI speaks.</p>
+  <form action="/upload" method="post" enctype="multipart/form-data">
+    <input type="file" name="file" accept=".csv,.xlsx,.xls" required>
+    <button class="btn" type="submit">Upload</button>
+  </form>
+</div>
+
+<div class="panel">
+  <h2>Calls</h2>
+  {% if calls %}
+  <table>
+    <thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Language</th><th>Status</th><th>When</th><th></th></tr></thead>
+    <tbody>
+      {% for c in calls %}
+      <tr>
+        <td>{{ c.id }}</td>
+        <td>{{ c.name or "—" }}</td>
+        <td>{{ c.phone }}</td>
+        <td>{{ c.language or "—" }}</td>
+        <td><span class="badge {{ c.status }}">{{ c.status.replace("_", " ") }}</span></td>
+        <td class="muted">{{ (c.started_at or c.created_at or "")[:16].replace("T", " ") }}</td>
+        <td><a href="/call/{{ c.id }}">View →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No calls yet. Run <code>python -m scripts.seed_demo</code> for demo data,
+  or turn on Layer 2 to place real calls.</p>
+  {% endif %}
+</div>
+
+{% if contacts %}
+<div class="panel">
+  <div style="display:flex; align-items:center; gap:12px; margin-bottom:14px">
+    <h2 style="margin:0">Contacts ({{ contacts|length }})</h2>
+    <form action="/call-all" method="post" style="margin-left:auto"
+          onsubmit="return confirm('Call all {{ contacts|length }} contacts now?');">
+      <button class="btn" type="submit" {% if not calling_ready %}disabled title="Start the voice engine first"{% endif %}>📞 Call everyone</button>
+    </form>
+  </div>
+  <table>
+    <thead><tr><th>Name</th><th>Phone</th><th>Language</th><th>Notes</th><th></th></tr></thead>
+    <tbody>
+      {% for p in contacts %}
+      <tr>
+        <td>{{ p.name or "—" }}</td>
+        <td>{{ p.phone }}</td>
+        <td>{{ p.language or "—" }}</td>
+        <td class="muted">{{ p.notes or "" }}</td>
+        <td>
+          <form action="/contacts/{{ p.id }}/call" method="post"
+                onsubmit="return confirm('Call {{ p.name or p.phone }} now?');">
+            <button class="btn secondary" type="submit" {% if not calling_ready %}disabled title="Start the voice engine first"{% endif %}>📞 Call</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}

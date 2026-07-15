@@ -1,0 +1,29 @@
+# Render Blueprint — Render reads this automatically when you connect the repo.
+# It defines one free web service running the combined app.
+services:
+  - type: web
+    name: voice-interview-agent
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements-server.txt"
+    startCommand: "uvicorn app.webapp:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.10"
+      # Secrets — you paste these in the Render dashboard (sync:false = not in git).
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_NUMBER
+        sync: false
+      # The question the AI asks (survives restarts on the free tier).
+      - key: DEFAULT_QUESTION
+        sync: false
+      - key: DEFAULT_LANGUAGE
+        value: "en-IN"
+      # PUBLIC_URL is auto-detected from RENDER_EXTERNAL_URL — no need to set it.

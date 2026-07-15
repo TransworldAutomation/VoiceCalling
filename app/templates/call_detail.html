@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Call #{{ call.id }} — {{ call.name or call.phone }}{% endblock %}
+{% block content %}
+
+<p><a href="/">← Back to dashboard</a></p>
+
+<div class="panel">
+  <h2>Call #{{ call.id }} · {{ call.name or "Unknown" }} · {{ call.phone }}</h2>
+  <p>
+    <span class="badge {{ call.status }}">{{ call.status.replace("_", " ") }}</span>
+    &nbsp; <span class="muted">Language:</span> {{ call.language or "—" }}
+    &nbsp; <span class="muted">Started:</span> {{ (call.started_at or "")[:16].replace("T", " ") or "—" }}
+    &nbsp; <span class="muted">Ended:</span> {{ (call.ended_at or "")[:16].replace("T", " ") or "—" }}
+  </p>
+
+  {% if call.recording_url %}
+  <h2 style="margin-top:18px">Recording</h2>
+  <audio controls style="width:100%" src="{{ call.recording_url }}"></audio>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>AI Summary</h2>
+  {% if call.summary %}
+    <div class="summary">{{ call.summary }}</div>
+  {% else %}
+    <p class="muted">No summary yet.</p>
+  {% endif %}
+  <form action="/call/{{ call.id }}/resummarize" method="post" style="margin-top:12px">
+    <button class="btn secondary" type="submit">Re-generate summary with AI</button>
+  </form>
+</div>
+
+<div class="panel">
+  <h2>Transcript</h2>
+  {% if messages %}
+    {% for m in messages %}
+    <div class="bubble {{ m.role }}">
+      <div class="who">{{ "🤖 AI Interviewer" if m.role == "agent" else "🧑 Person" }}</div>
+      {{ m.content }}
+    </div>
+    {% endfor %}
+  {% else %}
+    <p class="muted">No transcript recorded.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

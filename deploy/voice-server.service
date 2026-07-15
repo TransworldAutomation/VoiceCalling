@@ -1,0 +1,15 @@
+[Unit]
+Description=AI Voice Interview - Voice Server (port 8080)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/Voice-Calling-App
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/ubuntu/Voice-Calling-App/.venv/bin/python -m app.server
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

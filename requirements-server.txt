@@ -1,0 +1,12 @@
+# Everything the deployed server needs, in ONE Python 3.12 environment.
+# (On the cloud VM there's no 3.14/3.12 split — one env runs both dashboard + voice.)
+pipecat-ai[anthropic,silero,sarvam,twilio]>=0.0.60
+twilio>=9.0
+anthropic>=0.40
+fastapi>=0.115
+uvicorn[standard]>=0.30
+jinja2>=3.1
+python-multipart>=0.0.9
+python-dotenv>=1.0
+pandas>=2.2
+openpyxl>=3.1

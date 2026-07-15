@@ -1,0 +1,16 @@
+# Layer 2 — real phone calling. Install with Python 3.12 (NOT 3.14).
+#
+#   py -3.12 -m venv .venv312
+#   .\.venv312\Scripts\Activate.ps1
+#   pip install -r requirements-voice.txt
+#
+# Pipecat with the pieces we use: Anthropic (LLM), Silero (voice activity),
+# Sarvam (Indian STT/TTS), Twilio (telephony transport).
+pipecat-ai[anthropic,silero,sarvam,twilio]>=0.0.60
+twilio>=9.0
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-dotenv>=1.0
+pandas>=2.2
+openpyxl>=3.1
+anthropic>=0.40

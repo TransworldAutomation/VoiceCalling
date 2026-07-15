@@ -1,0 +1,18 @@
+# Caddy reverse proxy — gives us free automatic HTTPS (required by Twilio for wss://).
+# Replace YOUR_DOMAIN below with your DuckDNS domain, e.g. myvoiceapp.duckdns.org
+#
+# Routing:
+#   /twiml, /ws  -> the voice server (port 8080)   [Twilio hits these]
+#   everything else -> the dashboard (port 8000)
+
+YOUR_DOMAIN {
+    handle /twiml* {
+        reverse_proxy localhost:8080
+    }
+    handle /ws* {
+        reverse_proxy localhost:8080
+    }
+    handle {
+        reverse_proxy localhost:8000
+    }
+}
