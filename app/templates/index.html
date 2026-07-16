@@ -1,6 +1,24 @@
 {% extends "base.html" %}
 {% block content %}
 
+{% if storage %}
+  {% if storage.permanent %}
+  <div class="panel" style="border-color: var(--accent-2)">
+    💾 <b>Data is permanent.</b> Connected to your Supabase database — contacts, call log and your saved question survive restarts.
+  </div>
+  {% elif storage.backend == "sqlite-fallback" %}
+  <div class="panel" style="border-color: var(--warn)">
+    ⚠️ <b>Data is NOT being saved permanently.</b> <code>DATABASE_URL</code> is set but the app could not connect to Supabase, so it's using temporary storage — <b>your data will be lost on restart.</b>
+    {% if storage.error %}<br><span class="muted">Reason: {{ storage.error }}</span>{% endif %}
+    <br><span class="muted">Fix the <code>DATABASE_URL</code> value in Render (Environment tab), then redeploy.</span>
+  </div>
+  {% else %}
+  <div class="panel" style="border-color: var(--warn)">
+    ⚠️ <b>Temporary storage.</b> No <code>DATABASE_URL</code> is set, so data is stored locally and will be lost when the server restarts. Add a Supabase <code>DATABASE_URL</code> in Render to make it permanent.
+  </div>
+  {% endif %}
+{% endif %}
+
 {% if calling_ready %}
 <div class="panel" style="border-color: var(--accent-2)">
   📞 <b>Calling is ON.</b> The voice server is reachable — click <b>Call</b> on any contact below, or call everyone.

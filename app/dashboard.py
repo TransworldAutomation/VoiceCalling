@@ -128,6 +128,7 @@ def home():
         "index.html",
         calls=calls, contacts=contacts, stats=stats,
         calling_ready=(not missing), missing=missing,
+        storage=database.storage_status(),
         interview_script=database.get_setting("interview_script", "") or config.DEFAULT_QUESTION,
         default_language=database.get_setting("default_language", "")
         or config.DEFAULT_LANGUAGE or config.SARVAM_LANGUAGE,

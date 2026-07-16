@@ -29,9 +29,23 @@ from app import config
 DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
 USE_PG = bool(DATABASE_URL)
 
+# Human-readable status of the storage backend, surfaced on the dashboard so you
+# can SEE whether your data is being saved permanently or only temporarily:
+#   "postgres"        -> connected to Supabase; data is permanent
+#   "sqlite"          -> local SQLite (no DATABASE_URL set); fine on your PC
+#   "sqlite-fallback" -> DATABASE_URL set but the connection FAILED; using
+#                        temporary storage, data will be lost. Fix DATABASE_URL.
+DB_STATUS = "sqlite"
+DB_ERROR = ""  # last connection error message, for the fallback case
+
 if USE_PG:
-    import psycopg
-    from psycopg.rows import dict_row
+    try:
+        import psycopg
+        from psycopg.rows import dict_row
+    except ImportError as e:  # driver not installed — degrade instead of crashing
+        USE_PG = False
+        DB_STATUS = "sqlite-fallback"
+        DB_ERROR = f"psycopg driver not installed: {e}"
 
 
 def _now() -> str:
@@ -78,21 +92,8 @@ def _insert(conn, sql, params):
     return cur.lastrowid
 
 
-def init_db():
-    """Create tables if they don't exist. Safe to call every startup."""
-    # Make it OBVIOUS in the Render logs which database is actually being used,
-    # so a missing/broken DATABASE_URL (silent SQLite fallback) is easy to spot.
-    if USE_PG:
-        # Show host only — never print the password.
-        host = DATABASE_URL.split("@")[-1].split("/")[0] if "@" in DATABASE_URL else "?"
-        print(f"[database] Using Postgres (Supabase) -> {host}", flush=True)
-    else:
-        print(
-            "[database] Using local SQLite (DATABASE_URL not set) -> "
-            f"{config.DB_PATH}. Data will NOT persist across restarts on Render.",
-            flush=True,
-        )
-
+def _create_tables():
+    """Run the CREATE TABLE statements against whichever backend is active."""
     # 'id' auto-increment differs between the two engines.
     pk = "BIGSERIAL PRIMARY KEY" if USE_PG else "INTEGER PRIMARY KEY AUTOINCREMENT"
 
@@ -132,12 +133,50 @@ def init_db():
     with get_conn() as conn:
         for s in statements:
             conn.execute(s)
-
         # Migration for OLD local SQLite databases missing the 'note' column.
         if not USE_PG:
             existing = [r[1] for r in conn.execute("PRAGMA table_info(calls)")]
             if "note" not in existing:
                 conn.execute("ALTER TABLE calls ADD COLUMN note TEXT")
+
+
+def init_db():
+    """Create tables if they don't exist. Safe to call every startup.
+
+    Never crashes the app: if DATABASE_URL is set but Supabase can't be reached
+    (wrong password, wrong host, etc.), we log a loud warning, fall back to the
+    temporary SQLite file so the site still runs, and record DB_STATUS so the
+    dashboard can warn you that data is NOT being saved permanently.
+    """
+    global USE_PG, DB_STATUS, DB_ERROR
+
+    if USE_PG:
+        try:
+            _create_tables()
+            DB_STATUS = "postgres"
+            host = DATABASE_URL.split("@")[-1].split("/")[0] if "@" in DATABASE_URL else "?"
+            print(f"[database] Using Postgres (Supabase) -> {host}", flush=True)
+            return
+        except Exception as e:
+            # Connection/setup failed — degrade gracefully to SQLite.
+            USE_PG = False
+            DB_STATUS = "sqlite-fallback"
+            DB_ERROR = str(e).splitlines()[0][:300] if str(e) else e.__class__.__name__
+            print(
+                "[database] ERROR: DATABASE_URL is set but the connection FAILED "
+                f"-> {DB_ERROR}\n[database] Falling back to TEMPORARY SQLite. Your "
+                "data will NOT persist. Check the DATABASE_URL value in Render.",
+                flush=True,
+            )
+
+    _create_tables()
+    if DB_STATUS != "sqlite-fallback":
+        DB_STATUS = "sqlite"
+        print(
+            "[database] Using local SQLite (DATABASE_URL not set) -> "
+            f"{config.DB_PATH}. Data will NOT persist across restarts on Render.",
+            flush=True,
+        )
 
 
 # ------------------------------- contacts ----------------------------------
@@ -230,6 +269,11 @@ def set_setting(key, value):
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
             (key, value),
         )
+
+
+def storage_status() -> dict:
+    """Where data is being stored right now — used for the dashboard banner."""
+    return {"backend": DB_STATUS, "error": DB_ERROR, "permanent": DB_STATUS == "postgres"}
 
 
 def get_transcript_text(call_id) -> str:
