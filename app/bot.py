@@ -66,13 +66,17 @@ async def run_bot(websocket, stream_sid: str, call_sid: str, call_id: int):
     # Read THIS call's details: the note (the question to ask) and the language,
     # both coming from the contact's row in your Excel.
     call_row = database.get_call(call_id) or {}
-    # The question(s) the AI asks: a contact-specific note wins; otherwise the
-    # global question box saved on the dashboard; otherwise the default interview.
+    # The question(s) the AI asks. The call row already holds the snapshot taken at
+    # dial time (the dashboard box wins there). We re-read the live dashboard setting
+    # as an extra guard, then fall back to the DEFAULT_QUESTION env var. Only if all
+    # of those are empty does the built-in generic interview run.
     note = call_row.get("note")
     if not (note and note.strip()):
-        note = database.get_setting("interview_script") or config.DEFAULT_QUESTION
+        note = (database.get_setting("interview_script") or "").strip() or config.DEFAULT_QUESTION
     call_language = config.normalize_language(
-        call_row.get("language") or config.DEFAULT_LANGUAGE
+        call_row.get("language")
+        or (database.get_setting("default_language") or "").strip()
+        or config.DEFAULT_LANGUAGE
     )
 
     serializer = TwilioFrameSerializer(
@@ -89,8 +93,10 @@ async def run_bot(websocket, stream_sid: str, call_sid: str, call_id: int):
             audio_out_enabled=True,
             audio_out_sample_rate=8000,   # Twilio phone audio is 8kHz; match it end-to-end
             add_wav_header=False,
-            # stop_secs=0.5: respond ~0.3s sooner after the caller stops talking.
-            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.5)),
+            # stop_secs=0.3: the AI starts replying ~0.2s sooner after the caller
+            # stops talking. Lower feels snappier but risks cutting people off
+            # mid-sentence; 0.3 is a good balance for phone speech.
+            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.3)),
             serializer=serializer,
         ),
     )

@@ -78,10 +78,26 @@ def _place_twilio_call(env, name, phone, language, note=None) -> int:
     """Create a call row and tell Twilio to dial, connecting to the voice server.
 
     `note` is the contact's Excel 'notes' value — the question the AI will ask.
+
+    We SNAPSHOT the exact question + language onto this call row right now, at dial
+    time. The dashboard box (the question/language you typed) is the master control
+    and wins; the contact's own Excel note/language is used only as a fallback. This
+    guarantees the AI asks what you just saved even if the server restarts between
+    dialing and the call connecting.
     """
-    default_lang = database.get_setting("default_language", config.SARVAM_LANGUAGE)
+    global_note = (database.get_setting("interview_script") or "").strip()
+    global_lang = (database.get_setting("default_language") or "").strip()
+
+    final_note = global_note or (note.strip() if note and note.strip() else None)
+    final_lang = (
+        global_lang
+        or (language.strip() if language and language.strip() else "")
+        or config.DEFAULT_LANGUAGE
+        or config.SARVAM_LANGUAGE
+    )
+
     call_id = database.create_call(
-        phone=phone, name=name, language=language or default_lang, note=note
+        phone=phone, name=name, language=final_lang, note=final_note
     )
     from twilio.rest import Client
     client = Client(env["TWILIO_ACCOUNT_SID"], env["TWILIO_AUTH_TOKEN"])

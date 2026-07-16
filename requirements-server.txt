@@ -10,3 +10,6 @@ python-multipart>=0.0.9
 python-dotenv>=1.0
 pandas>=2.2
 openpyxl>=3.1
+# Postgres driver — used when DATABASE_URL is set (Supabase). Persists data
+# across restarts so the call log and contacts are never wiped.
+psycopg[binary]>=3.1

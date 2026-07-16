@@ -148,8 +148,13 @@ Flow:
 # Storage
 # ---------------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(BASE_DIR, "data", "interviews.db")
-RECORDINGS_DIR = os.path.join(BASE_DIR, "data", "recordings")
+# DATA_DIR: where the SQLite database and recordings live. On hosts with an
+# ephemeral filesystem (e.g. Render free tier) the default project folder is
+# WIPED on every restart, taking your contacts and call history with it. Mount a
+# persistent disk and point DATA_DIR at it (e.g. DATA_DIR=/var/data) to keep them.
+DATA_DIR = os.getenv("DATA_DIR") or os.path.join(BASE_DIR, "data")
+DB_PATH = os.getenv("DB_PATH") or os.path.join(DATA_DIR, "interviews.db")
+RECORDINGS_DIR = os.path.join(DATA_DIR, "recordings")
 
 # Ports
 DASHBOARD_PORT = 8000

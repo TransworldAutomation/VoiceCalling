@@ -21,7 +21,13 @@ services:
         sync: false
       - key: TWILIO_PHONE_NUMBER
         sync: false
-      # The question the AI asks (survives restarts on the free tier).
+      # Supabase Postgres connection string. When set, ALL data (contacts, call
+      # log, saved question) lives in Supabase and survives every restart, so the
+      # free tier no longer wipes your data. Paste it in the Render dashboard.
+      # Format: postgresql://postgres:PASSWORD@db.xxxx.supabase.co:5432/postgres
+      - key: DATABASE_URL
+        sync: false
+      # The question the AI asks (extra fallback; DATABASE_URL is the real fix).
       - key: DEFAULT_QUESTION
         sync: false
       - key: DEFAULT_LANGUAGE
