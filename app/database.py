@@ -80,6 +80,19 @@ def _insert(conn, sql, params):
 
 def init_db():
     """Create tables if they don't exist. Safe to call every startup."""
+    # Make it OBVIOUS in the Render logs which database is actually being used,
+    # so a missing/broken DATABASE_URL (silent SQLite fallback) is easy to spot.
+    if USE_PG:
+        # Show host only — never print the password.
+        host = DATABASE_URL.split("@")[-1].split("/")[0] if "@" in DATABASE_URL else "?"
+        print(f"[database] Using Postgres (Supabase) -> {host}", flush=True)
+    else:
+        print(
+            "[database] Using local SQLite (DATABASE_URL not set) -> "
+            f"{config.DB_PATH}. Data will NOT persist across restarts on Render.",
+            flush=True,
+        )
+
     # 'id' auto-increment differs between the two engines.
     pk = "BIGSERIAL PRIMARY KEY" if USE_PG else "INTEGER PRIMARY KEY AUTOINCREMENT"
 
