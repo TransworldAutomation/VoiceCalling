@@ -9,11 +9,10 @@ Run it with:   python -m app.server
 It must be reachable from the internet (use ngrok — see the README).
 """
 
-import base64
+import asyncio
 import json
 import os
 import time
-import urllib.request
 
 from fastapi import FastAPI, WebSocket, Request
 from fastapi.responses import HTMLResponse
@@ -32,39 +31,34 @@ logger.add(
 )
 
 
-def _save_recording(call_id: int, call_sid: str):
-    """After the call ends, download Twilio's recording into data/recordings/
-    so it plays in the dashboard. Twilio finalizes the file a few seconds after
-    the call ends, so we poll briefly."""
+def _store_recording(call_id: int, call_sid: str):
+    """Link Twilio's recording to this call once the call ends.
+
+    We deliberately do NOT download the audio to local disk: on hosts with an
+    ephemeral filesystem (Render free tier) that file disappears on every restart,
+    which is why recordings kept vanishing. Instead we store Twilio's recording
+    SID; the dashboard streams the audio straight from Twilio on demand, so it
+    keeps working forever.
+
+    Twilio finalizes the recording a few seconds AFTER the call ends, so we poll.
+    This function blocks (time.sleep), so callers must run it in a worker thread.
+    """
     from twilio.rest import Client
 
     client = Client(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN)
     rec = None
-    for _ in range(8):  # up to ~16s for Twilio to finalize
+    for _ in range(15):  # up to ~60s for Twilio to finalize the recording
         recs = client.recordings.list(call_sid=call_sid, limit=1)
         if recs:
             rec = recs[0]
             break
-        time.sleep(2)
+        time.sleep(4)
     if not rec:
         print(f"No recording available yet for call {call_id}.")
         return
 
-    os.makedirs(config.RECORDINGS_DIR, exist_ok=True)
-    media_url = (
-        f"https://api.twilio.com/2010-04-01/Accounts/"
-        f"{config.TWILIO_ACCOUNT_SID}/Recordings/{rec.sid}.mp3"
-    )
-    auth = base64.b64encode(
-        f"{config.TWILIO_ACCOUNT_SID}:{config.TWILIO_AUTH_TOKEN}".encode()
-    ).decode()
-    req = urllib.request.Request(media_url, headers={"Authorization": f"Basic {auth}"})
-    fname = f"call_{call_id}.mp3"
-    with urllib.request.urlopen(req, timeout=30) as r, \
-            open(os.path.join(config.RECORDINGS_DIR, fname), "wb") as f:
-        f.write(r.read())
-    database.finish_call(call_id, status="completed", recording_url=f"/recordings/{fname}")
-    print(f"Saved recording for call {call_id} -> {fname}")
+    database.finish_call(call_id, status="completed", recording_url=f"/recordings/{rec.sid}")
+    print(f"Linked recording {rec.sid} to call {call_id}")
 
 
 @app.post("/twiml")
@@ -131,15 +125,19 @@ async def websocket_endpoint(websocket: WebSocket):
         database.finish_call(call_id, status="failed")
         print(f"Call {call_id} failed: {e}")
     finally:
-        # Download the call recording (best effort).
+        # IMPORTANT: both of these are slow, BLOCKING operations (Twilio polling
+        # with sleeps, and an Anthropic API call). Running them directly on the
+        # event loop froze the whole web server for 20-40s after every call — the
+        # dashboard would not load until they finished. asyncio.to_thread moves
+        # them to a worker thread so the site stays responsive.
         try:
             if call_sid:
-                _save_recording(call_id, call_sid)
+                await asyncio.to_thread(_store_recording, call_id, call_sid)
         except Exception as e:
-            print(f"Could not save recording for call {call_id}: {e}")
+            print(f"Could not link recording for call {call_id}: {e}")
         # Generate the AI summary once the call ends.
         try:
-            summarize_call(call_id)
+            await asyncio.to_thread(summarize_call, call_id)
         except Exception as e:
             print(f"Could not summarize call {call_id}: {e}")
 

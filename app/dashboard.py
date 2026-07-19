@@ -227,10 +227,44 @@ async def upload_contacts(file: UploadFile = File(...)):
     return RedirectResponse(url="/", status_code=303)
 
 
-@app.get("/recordings/{filename}")
-def get_recording(filename: str):
-    """Serve a saved call recording."""
-    path = os.path.join(config.RECORDINGS_DIR, os.path.basename(filename))
+@app.get("/healthz")
+def healthz():
+    """Tiny always-on endpoint. Point a free uptime pinger (e.g. UptimeRobot or
+    cron-job.org) at this URL every ~10 minutes to stop Render's free tier going
+    to sleep — that sleep is what makes the first call take ~40-50 seconds."""
+    return {"ok": True, "storage": database.storage_status()["backend"]}
+
+
+@app.get("/recordings/{name}")
+def get_recording(name: str):
+    """Serve a call recording.
+
+    Recordings are stored as a Twilio Recording SID (starts with 'RE') rather than
+    a local file, because local files are wiped whenever the server restarts. We
+    stream the audio from Twilio on demand (with auth) so it always plays. Older
+    calls that saved a real file still work via the fallback below.
+    """
+    name = os.path.basename(name)
+
+    if name.startswith("RE"):
+        import base64
+        import urllib.request
+        from fastapi.responses import StreamingResponse
+
+        env = _live_env()
+        sid = name.split(".")[0]
+        account = env.get("TWILIO_ACCOUNT_SID", "")
+        token = env.get("TWILIO_AUTH_TOKEN", "")
+        url = f"https://api.twilio.com/2010-04-01/Accounts/{account}/Recordings/{sid}.mp3"
+        auth = base64.b64encode(f"{account}:{token}".encode()).decode()
+        req = urllib.request.Request(url, headers={"Authorization": f"Basic {auth}"})
+        try:
+            resp = urllib.request.urlopen(req, timeout=30)
+        except Exception as e:
+            return HTMLResponse(f"Recording not available yet: {e}", status_code=404)
+        return StreamingResponse(resp, media_type="audio/mpeg")
+
+    path = os.path.join(config.RECORDINGS_DIR, name)
     if os.path.exists(path):
         return FileResponse(path)
     return HTMLResponse("Recording not available", status_code=404)
